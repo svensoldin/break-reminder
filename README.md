@@ -8,7 +8,8 @@ clears itself after a countdown.
   visible but unreadable, so there's nothing to skim and nothing to lose.
 - Centered card with an **OK** button; Return dismisses it too.
 - Closes itself after a countdown (default 30s) if you do nothing.
-- Runs on a fixed interval via `launchd` (default 45 minutes).
+- An eye icon in the menu bar shows the time left until the next break, turns
+  reminders on and off, and sets the interval (default 45 minutes).
 
 No dependencies beyond the Swift toolchain that ships with the Xcode Command Line
 Tools, and no screen-recording permission — the blur is done by the window server.
@@ -23,19 +24,29 @@ cd break-reminder
 
 ## Configure
 
-`install.sh` reads three environment variables:
+Pick the interval from the eye icon's **Interval** menu: a preset, or **Custom…**
+for any number of minutes. The choice is saved and survives restarts.
+
+`install.sh` reads two environment variables for the overlay itself:
 
 | Variable            | Default                        | Meaning                          |
 | ------------------- | ------------------------------ | -------------------------------- |
-| `INTERVAL_SECONDS`  | `2700` (45 min)                | How often the reminder fires     |
 | `DISPLAY_SECONDS`   | `30`                           | How long it stays on screen      |
 | `MESSAGE`           | `Look away, stretch, breathe.` | The line under the title         |
 
 ```bash
-INTERVAL_SECONDS=1200 DISPLAY_SECONDS=20 MESSAGE="Stand up." ./install.sh
+DISPLAY_SECONDS=20 MESSAGE="Stand up." ./install.sh
 ```
 
-Re-run `./install.sh` after changing anything; it rebuilds and reloads the agent.
+Re-run `./install.sh` after changing anything; it rebuilds and reloads the app.
+
+## Menu bar app
+
+`break-reminder-menu` is started at login by a `launchd` agent and does the
+scheduling: it opens the overlay when the countdown runs out, then starts the next
+countdown once you dismiss it. Waking the Mac from sleep also restarts the
+countdown, since time asleep is time away from the screen. Quitting the menu bar
+app stops the reminders; re-run `./install.sh` or log back in to bring it back.
 
 ## Try it without waiting
 

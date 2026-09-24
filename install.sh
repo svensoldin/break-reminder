@@ -1,19 +1,23 @@
 #!/bin/bash
-# Compiles the overlay and registers the launch agent that runs it on a fixed interval.
+# Compiles the overlay and the menu bar app that schedules it, then starts the menu bar app at login.
 set -euo pipefail
 
-INTERVAL_SECONDS="${INTERVAL_SECONDS:-2700}"
 DISPLAY_SECONDS="${DISPLAY_SECONDS:-30}"
 MESSAGE="${MESSAGE:-Look away, stretch, breathe.}"
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BINARY="$REPO_DIR/break-reminder"
-LABEL="com.breakreminder.agent"
+MENU_BINARY="$REPO_DIR/break-reminder-menu"
+LABEL="com.breakreminder.menu"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
-LEGACY_LABEL="com.svensoldin.breakreminder"
+# Earlier installs fired the overlay straight from launchd; the menu bar app schedules it now.
+LEGACY_LABELS=("com.svensoldin.breakreminder" "com.breakreminder.agent")
 
 echo "Building $BINARY"
 swiftc -O -o "$BINARY" "$REPO_DIR/BreakReminder.swift"
+
+echo "Building $MENU_BINARY"
+swiftc -O -o "$MENU_BINARY" "$REPO_DIR/BreakReminderMenu.swift"
 
 echo "Writing $PLIST"
 mkdir -p "$HOME/Library/LaunchAgents"
@@ -27,27 +31,33 @@ cat > "$PLIST" <<PLIST_EOF
 
     <key>ProgramArguments</key>
     <array>
-        <string>$BINARY</string>
+        <string>$MENU_BINARY</string>
         <string>$DISPLAY_SECONDS</string>
         <string>$MESSAGE</string>
     </array>
 
-    <key>StartInterval</key>
-    <integer>$INTERVAL_SECONDS</integer>
-
     <key>RunAtLoad</key>
-    <false/>
+    <true/>
+
+    <!-- Restart after a crash, but let Quit from the menu stick. -->
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
 </dict>
 </plist>
 PLIST_EOF
 
 plutil -lint "$PLIST" > /dev/null
 
-# Earlier installs used a personal label; drop it so the reminder does not fire twice.
-launchctl bootout "gui/$(id -u)/$LEGACY_LABEL" 2>/dev/null || true
-rm -f "$HOME/Library/LaunchAgents/$LEGACY_LABEL.plist"
+for legacy_label in "${LEGACY_LABELS[@]}"; do
+    launchctl bootout "gui/$(id -u)/$legacy_label" 2>/dev/null || true
+    launchctl enable "gui/$(id -u)/$legacy_label"
+    rm -f "$HOME/Library/LaunchAgents/$legacy_label.plist"
+done
 
 launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
 launchctl bootstrap "gui/$(id -u)" "$PLIST"
 
-echo "Installed. Reminder every ${INTERVAL_SECONDS}s, on screen for ${DISPLAY_SECONDS}s."
+echo "Installed. Pick the interval from the eye icon in the menu bar; breaks stay on screen for ${DISPLAY_SECONDS}s."
